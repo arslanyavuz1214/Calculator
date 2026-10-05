@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Red Calculator</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display",
+                   "Helvetica Neue", Arial, sans-serif;
+    }
+    body {
+      color: white;
+    }
+    .calculator {
+      width: 100vw;
+      height: 100vh;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      background:
+        radial-gradient(circle at 80% 15%, rgba(255, 0, 0, 0.10), transparent 30%),
+        #000;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    /* Anzeige */
+    .display {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      align-items: flex-end;
+      padding: 25px 25px 20px;
+      overflow: hidden;
+    }
+    .history {
+      width: 100%;
+      text-align: right;
+      color: #666;
+      font-size: clamp(18px, 5vw, 28px);
+      min-height: 35px;
+      margin-bottom: 8px;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    .result {
+      width: 100%;
+      text-align: right;
+      color: #fff;
+      font-size: clamp(55px, 17vw, 105px);
+      font-weight: 300;
+      line-height: 1;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+    /* Buttons */
+    .buttons {
+      width: 100%;
+      padding: 10px 12px 15px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+    }
+    button {
+      border: none;
+      outline: none;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      border-radius: 50%;
+      background: #202020;
+      color: white;
+      font-size: clamp(25px, 8vw, 42px);
+      font-weight: 400;
+      cursor: pointer;
+      transition:
+        transform 0.08s ease,
+        background 0.12s ease;
+    }
+    button:active {
+      transform: scale(0.91);
+      background: #383838;
+    }
+    /* Löschen / Sondertasten */
+    .function {
+      background: #2b2b2b;
+      color: #fff;
+    }
+    /* Operatoren */
+    .operator {
+      background: #d40000;
+      color: white;
+      font-weight: 500;
+    }
+    .operator:active {
+      background: #ff2020;
+    }
+    .operator.active {
+      background: white;
+      color: #d40000;
+    }
+    /* Gleich */
+    .equals {
+      background: #ff0000;
+      color: white;
+      font-weight: 600;
+    }
+    .equals:active {
+      background: #ff3333;
+    }
+    /* Null-Button */
+    .zero {
+      grid-column: span 2;
+      aspect-ratio: auto;
+      border-radius: 999px;
+      text-align: left;
+      padding-left: 30px;
+    }
+    /* Kleine Geräte */
+    @media (max-height: 650px) {
+      .display {
+        padding-top: 10px;
+        padding-bottom: 10px;
+      }
+      .buttons {
+        gap: 7px;
+        padding: 7px 10px 10px;
+      }
+    }
+    /* Querformat */
+    @media (orientation: landscape) {
+      .calculator {
+        flex-direction: row;
+      }
+      .display {
+        width: 45%;
+        padding: 20px;
+      }
+      .buttons {
+        width: 55%;
+        height: 100%;
+        padding: 15px;
+      }
+      button {
+        max-height: 20vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="calculator">
+    <!-- Anzeige -->
+    <section class="display">
+      <div class="history" id="history"></div>
+      <div class="result" id="result">0</div>
+    </section>
+    <!-- Taschenrechner -->
+    <section class="buttons">
+      <button class="function" onclick="clearCalculator()">AC</button>
+      <button class="function" onclick="toggleSign()">±</button>
+      <button class="function" onclick="percentage()">%</button>
+      <button class="operator" data-operator="/" onclick="operator('/')">÷</button>
+      <button onclick="number('7')">7</button>
+      <button onclick="number('8')">8</button>
+      <button onclick="number('9')">9</button>
+      <button class="operator" data-operator="*" onclick="operator('*')">×</button>
+      <button onclick="number('4')">4</button>
+      <button onclick="number('5')">5</button>
+      <button onclick="number('6')">6</button>
+      <button class="operator" data-operator="-" onclick="operator('-')">−</button>
+      <button onclick="number('1')">1</button>
+      <button onclick="number('2')">2</button>
+      <button onclick="number('3')">3</button>
+      <button class="operator" data-operator="+" onclick="operator('+')">+</button>
+      <button class="zero" onclick="number('0')">0</button>
+      <button onclick="decimal()">.</button>
+      <button class="equals" onclick="calculate()">=</button>
+    </section>
+  </main>
+  <script>
+    const resultDisplay = document.getElementById("result");
+    const historyDisplay = document.getElementById("history");
+    let current = "0";
+    let previous = null;
+    let currentOperator = null;
+    let waitingForNumber = false;
+    function updateDisplay() {
+      resultDisplay.textContent = formatNumber(current);
+    }
+    function formatNumber(value) {
+      if (value === "Error") return value;
+      const number = Number(value);
+      if (!Number.isFinite(number)) {
+        return "Error";
+      }
+      if (
+        Math.abs(number) >= 1e12 ||
+        (Math.abs(number) > 0 && Math.abs(number) < 1e-9)
+      ) {
+        return number.toExponential(6);
+      }
+      return value;
+    }
+    function number(value) {
+      if (current === "Error") {
+        clearCalculator();
+      }
+      if (waitingForNumber) {
+        current = value;
+        waitingForNumber = false;
+      } else {
+        if (current === "0") {
+          current = value;
+        } else {
+          current += value;
+        }
+      }
+      updateDisplay();
+    }
+    function decimal() {
+      if (current === "Error") {
+        clearCalculator();
+      }
+      if (waitingForNumber) {
+        current = "0.";
+        waitingForNumber = false;
+        updateDisplay();
+        return;
+      }
+      if (!current.includes(".")) {
+        current += ".";
+        updateDisplay();
+      }
+    }
+    function operator(op) {
+      if (current === "Error") return;
+      const inputValue = Number(current);
+      if (previous !== null && currentOperator && !waitingForNumber) {
+        const calculated = performCalculation(
+          previous,
+          inputValue,
+          currentOperator
+        );
+        current = String(calculated);
+        previous = calculated;
+      } else {
+        previous = inputValue;
+      }
+      currentOperator = op;
+      waitingForNumber = true;
+      historyDisplay.textContent =
+        formatNumber(String(previous)) + " " + displayOperator(op);
+      document.querySelectorAll(".operator").forEach(button => {
+        button.classList.remove("active");
+      });
+      const activeButton =
+        document.querySelector(`[data-operator="${op}"]`);
+      if (activeButton) {
+        activeButton.classList.add("active");
+      }
+      updateDisplay();
+    }
+    function calculate() {
+      if (
+        previous === null ||
+        currentOperator === null ||
+        current === "Error"
+      ) {
+        return;
+      }
+      const secondNumber = Number(current);
+      const answer = performCalculation(
+        previous,
+        secondNumber,
+        currentOperator
+      );
+      historyDisplay.textContent =
+        formatNumber(String(previous)) +
+        " " +
+        displayOperator(currentOperator) +
+        " " +
+        formatNumber(String(secondNumber)) +
+        " =";
+      current = String(answer);
+      previous = null;
+      currentOperator = null;
+      waitingForNumber = true;
+      document.querySelectorAll(".operator").forEach(button => {
+        button.classList.remove("active");
+      });
+      updateDisplay();
+    }
+    function performCalculation(a, b, op) {
+      switch (op) {
+        case "+":
+          return a + b;
+        case "-":
+          return a - b;
+        case "*":
+          return a * b;
+        case "/":
+          if (b === 0) {
+            return "Error";
+          }
+          return a / b;
+        default:
+          return b;
+      }
+    }
+    function displayOperator(op) {
+      switch (op) {
+        case "*": return "×";
+        case "/": return "÷";
+        case "-": return "−";
+        case "+": return "+";
+        default: return op;
+      }
+    }
+    function clearCalculator() {
+      current = "0";
+      previous = null;
+      currentOperator = null;
+      waitingForNumber = false;
+      historyDisplay.textContent = "";
+      document.querySelectorAll(".operator").forEach(button => {
+        button.classList.remove("active");
+      });
+      updateDisplay();
+    }
+    function toggleSign() {
+      if (current === "0" || current === "Error") return;
+      if (current.startsWith("-")) {
+        current = current.substring(1);
+      } else {
+        current = "-" + current;
+      }
+      updateDisplay();
+    }
+    function percentage() {
+      if (current === "Error") return;
+      current = String(Number(current) / 100);
+      updateDisplay();
+    }
+    /* Tastatur-Unterstützung */
+    document.addEventListener("keydown", event => {
+      const key = event.key;
+      if (key >= "0" && key <= "9") {
+        number(key);
+      }
+      if (key === ".") {
+        decimal();
+      }
+      if (["+", "-", "*", "/"].includes(key)) {
+        operator(key);
+      }
+      if (key === "Enter" || key === "=") {
+        calculate();
+      }
+      if (key === "Escape" || key === "Delete") {
+        clearCalculator();
+      }
+      if (key === "%") {
+        percentage();
+      }
+      if (key === "Backspace") {
+        if (
+          current.length > 1 &&
+          current !== "Error"
+        ) {
+          current = current.slice(0, -1);
+        } else {
+          current = "0";
+        }
+        updateDisplay();
+      }
+    });
+    updateDisplay();
+  </script>
+</body>
+</html>
